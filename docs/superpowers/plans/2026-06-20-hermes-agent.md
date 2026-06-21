@@ -4,47 +4,38 @@
 
 **Goal:** Create the `inteliclear/engineering-hermes-agent` GitHub repo — a one-command bootstrap that installs Hermes, wires it to the ICLR LiteLLM proxy, seeds shared team memory, and installs pre-built skills.
 
-**Architecture:** A pure-configuration repo with no app code and no servers. `setup.sh` is the only executable. All other content is markdown (skill files, memory seeds, docs) and config files (`.env.example`, `INDEX.json`). The repo is cloned per team member; Hermes runs locally and routes all LLM calls through `https://litellm.inteliclear.io/v1`.
+**Architecture:** A pure-configuration repo with no app code and no servers. `setup.sh` is the only executable. It installs Hermes via the official curl installer, then maps the repo's team-facing `.env` into Hermes' native config (`~/.hermes/config.yaml` + `~/.hermes/.env`), seeds memory into `~/.hermes/memories/`, and symlinks `skills/` into `~/.hermes/skills/`. Hermes auto-discovers `SKILL.md` files — no index file.
 
-**Tech Stack:** Bash (setup.sh), Markdown (skills/memory/docs), Python `requests` (example), TypeScript `node-fetch` (example), `gh` CLI (repo creation)
+**Tech Stack:** Bash (setup.sh), Markdown + YAML frontmatter (SKILL.md), Markdown (memory/docs), Python `requests` (example), TypeScript native `fetch` (example), `gh` CLI (repo creation)
 
 ## Global Constraints
 
-- Hermes version: pinned in `HERMES_VERSION` at top of `setup.sh` — update there to upgrade
-- LiteLLM proxy: `https://litellm.inteliclear.io/v1` — always HTTPS, OpenAI-compatible endpoint
-- Model aliases: `reasoning`, `coding`, `smart`, `fast`, `coder`, `coder_pro`
-- `.env` is gitignored — never committed
-- `setup.sh` is idempotent — safe to re-run
-- All env config via `HERMES_*` variables only
-- Examples use `/chat/completions` (not `/v1/messages`) — `HERMES_API_BASE` already includes `/v1`
-- Python example requires `requests` package; TypeScript example requires `node-fetch`
-- Local clone target: `/home/tpanchal/iclr/engineering-hermes-agent/`
+- Hermes install: `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash` — **not** pip. Only Git is required (installer brings Python 3.11, Node 22, ripgrep, ffmpeg). No version pinning is documented; upgrades via `hermes update`.
+- Hermes config file: `~/.hermes/config.yaml` — set `model.provider: custom`, `model.base_url`, `model.default` via `hermes config set`.
+- Hermes secret file: `~/.hermes/.env` — `OPENAI_API_KEY=<litellm key>` (written directly, never via sed/regex).
+- Hermes memory dir: `~/.hermes/memories/` (plural) — holds `MEMORY.md` + `USER.md`.
+- Hermes skills dir: `~/.hermes/skills/` — auto-discovers `SKILL.md` files. We symlink the repo's `skills/` in as `~/.hermes/skills/iclr`. No `INDEX.json`.
+- Skill files are `SKILL.md` with YAML frontmatter — required keys `name`, `description`; optional `version`, `metadata.hermes.tags`, `metadata.hermes.category`.
+- LiteLLM proxy: `https://litellm.inteliclear.io/v1` — OpenAI-compatible. Request path is `$HERMES_API_BASE/chat/completions` (base already ends in `/v1`).
+- Model aliases: `reasoning`, `coding`, `smart`, `fast`, `coder`, `coder_pro`.
+- Repo `.env` (team-facing, gitignored) holds `HERMES_API_BASE`, `HERMES_API_KEY`, `HERMES_MODEL_ALIAS`.
+- `setup.sh` is idempotent — safe to re-run.
+- **turbo-sql-chunk repo path is `/home/tpanchal/iclr/turbo-sql-chunk`** (per global CLAUDE.md Key Repos table).
+- Local clone target for this repo: `/home/tpanchal/iclr/engineering-hermes-agent/` (already created and cloned).
+
+> **Note:** The GitHub repo `inteliclear/engineering-hermes-agent` and its local clone already exist, and this plan file is already committed to it. Task 1 below covers only the remaining scaffold file (`.gitignore`).
 
 ---
 
-### Task 1: Create GitHub Repo + .gitignore
+### Task 1: `.gitignore`
 
 **Files:**
 - Create: `.gitignore`
 
 **Interfaces:**
-- Produces: empty repo at `github.com/inteliclear/engineering-hermes-agent`, cloned at `/home/tpanchal/iclr/engineering-hermes-agent/`
+- Produces: a repo that ignores `.env`, logs, and language caches.
 
-- [ ] **Step 1: Create the GitHub repo and clone it**
-
-```bash
-gh repo create inteliclear/engineering-hermes-agent \
-  --public \
-  --description "Bootstrap repo: install Hermes agent wired to ICLR LiteLLM proxy" \
-  --clone
-
-mv engineering-hermes-agent /home/tpanchal/iclr/
-cd /home/tpanchal/iclr/engineering-hermes-agent
-```
-
-If `gh` is not configured for the `inteliclear` org: `gh auth login` first, then select the `inteliclear` org.
-
-- [ ] **Step 2: Write .gitignore**
+- [ ] **Step 1: Write .gitignore**
 
 ```text
 .env
@@ -55,23 +46,21 @@ node_modules/
 .DS_Store
 ```
 
-- [ ] **Step 3: Verify**
+- [ ] **Step 2: Verify**
 
 ```bash
-cat .gitignore
+cd /home/tpanchal/iclr/engineering-hermes-agent
+grep -E '^\.env$|^logs/' .gitignore
 ```
 
-Expected output: `.env` and `logs/` are present.
+Expected: both `.env` and `logs/` print.
 
-- [ ] **Step 4: Commit and push**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add .gitignore
-git commit -m "chore: initial repo scaffold"
-git push -u origin main
+git commit -m "chore: add .gitignore"
 ```
-
-Expected: commit succeeds, branch `main` appears on GitHub.
 
 ---
 
@@ -81,7 +70,7 @@ Expected: commit succeeds, branch `main` appears on GitHub.
 - Create: `.env.example`
 
 **Interfaces:**
-- Produces: `HERMES_API_BASE`, `HERMES_API_KEY`, `HERMES_MODEL_ALIAS`, `HERMES_MODEL`, `HERMES_ROOT` — the five env vars used by setup.sh and all examples
+- Produces: `HERMES_API_BASE`, `HERMES_API_KEY`, `HERMES_MODEL_ALIAS` — the three team-facing env vars read by setup.sh and the example scripts.
 
 - [ ] **Step 1: Write .env.example**
 
@@ -93,27 +82,21 @@ HERMES_API_KEY=<your-litellm-master-key>
 # Model routing — change per team member preference
 # Options: reasoning, coding, smart, fast, coder, coder_pro
 HERMES_MODEL_ALIAS=reasoning
-
-# Optional: override the underlying model ID (resolved by alias if blank)
-HERMES_MODEL=
-
-# Hermes data root
-HERMES_ROOT=~/.hermes
 ```
 
-- [ ] **Step 2: Verify no real secrets are present**
+- [ ] **Step 2: Verify no real secret is present**
 
 ```bash
 grep "HERMES_API_KEY" .env.example
 ```
 
-Expected: `HERMES_API_KEY=<your-litellm-master-key>` — placeholder only, not a real key.
+Expected: `HERMES_API_KEY=<your-litellm-master-key>` — placeholder only.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add .env.example
-git commit -m "chore: add .env.example with ICLR LiteLLM proxy config"
+git commit -m "chore: add .env.example team-facing config"
 ```
 
 ---
@@ -125,7 +108,7 @@ git commit -m "chore: add .env.example with ICLR LiteLLM proxy config"
 - Create: `memory/USER.md`
 
 **Interfaces:**
-- Produces: two files copied by setup.sh Step 4 into `$HERMES_ROOT/memory/`
+- Produces: two files copied by setup.sh Step 4 into `~/.hermes/memories/`.
 
 - [ ] **Step 1: Create directory**
 
@@ -139,7 +122,8 @@ mkdir -p memory
 # ICLR Team Memory
 
 Shared context about the ICLR (Inteliclear) cluster and infrastructure.
-Seeded into Hermes agent memory on first setup.
+Seeded into Hermes agent memory on first setup. Hermes reads this from
+~/.hermes/memories/MEMORY.md at session start.
 
 ## Cluster Overview
 
@@ -189,7 +173,7 @@ kubectl -n litellm rollout status deploy/litellm
 | Repo | Location | Purpose |
 |------|----------|---------|
 | `glowing-octo-palm-tree` | `/home/tpanchal/iclr/glowing-octo-palm-tree` | GitOps source of truth |
-| `turbo-sql-chunk` | `/home/tpanchal/workarea/git_repo/turbo-sql-chunk` | SQL chunking → ChromaDB for RAG |
+| `turbo-sql-chunk` | `/home/tpanchal/iclr/turbo-sql-chunk` | SQL chunking → ChromaDB for RAG |
 | `engineering-hermes-agent` | `/home/tpanchal/iclr/engineering-hermes-agent` | This repo — Hermes bootstrap |
 
 ## SSH Access
@@ -216,7 +200,8 @@ ssh -i ~/.ssh/iclr-dgx-spark tpanchal@10.5.1.49
 ```markdown
 # User Profile
 
-Fill this in after running setup.sh. Hermes uses it to personalize responses.
+Fill this in after running setup.sh. Hermes reads this from
+~/.hermes/memories/USER.md and uses it to personalize responses.
 
 ## Identity
 
@@ -258,17 +243,16 @@ git commit -m "feat: add shared MEMORY.md and USER.md template"
 
 ---
 
-### Task 4: Skills Files
+### Task 4: Skill Files (`SKILL.md`)
 
 **Files:**
 - Create: `skills/README.md`
-- Create: `skills/INDEX.json`
-- Create: `skills/sql-ops/README.md`
-- Create: `skills/cluster-ops/README.md`
-- Create: `skills/general/README.md`
+- Create: `skills/sql-ops/SKILL.md`
+- Create: `skills/cluster-ops/SKILL.md`
+- Create: `skills/general/SKILL.md`
 
 **Interfaces:**
-- Produces: `skills/INDEX.json` mapping `{"sql-ops": "...", "cluster-ops": "...", "general": "..."}` — consumed by setup.sh Step 5 and by Hermes at runtime
+- Produces: three `SKILL.md` files auto-discovered by Hermes once `skills/` is symlinked into `~/.hermes/skills/` (Task 6 Step 5). No index file.
 
 - [ ] **Step 1: Create directories**
 
@@ -281,38 +265,44 @@ mkdir -p skills/sql-ops skills/cluster-ops skills/general
 ```markdown
 # ICLR Hermes Skills
 
-Pre-built skills for three ICLR use cases.
+Pre-built skills for three ICLR use cases. Each skill is a directory with a
+`SKILL.md` file (agentskills.io standard). Hermes auto-discovers them from
+`~/.hermes/skills/` — there is no index file to maintain.
 
 ## Catalog
 
-| Skill | Trigger phrases | What it does |
-|-------|----------------|-------------|
-| `sql-ops` | "query chromadb", "search procedures", "run workflow", "generate spec" | SQL chunking, ChromaDB queries, spec generation |
-| `cluster-ops` | "check cluster", "deploy", "drain node", "check longhorn", "traefik" | k3s ops, GitOps workflow, Longhorn, Traefik |
-| `general` | "review code", "debug", "git", "logging", "PR" | Code review, git workflow, structured debugging |
+| Skill | What it does |
+|-------|-------------|
+| `sql-ops` | SQL chunking, ChromaDB queries, spec generation |
+| `cluster-ops` | k3s ops, GitOps workflow, Longhorn, Traefik |
+| `general` | Code review, git workflow, structured debugging |
 
 ## Adding a New Skill
 
-1. Create `skills/<name>/README.md` following the format of an existing skill.
-2. Re-run `./setup.sh` to regenerate `INDEX.json` and re-symlink.
-3. Hermes picks up the new skill on next start.
+1. Create `skills/<name>/SKILL.md` with valid frontmatter (see existing skills).
+2. `git pull` on each machine — the symlink into `~/.hermes/skills/` means
+   Hermes sees it immediately. No `setup.sh` re-run needed.
 
-## Skill File Format
+## SKILL.md Frontmatter
 
-Each skill README should include:
-- `## Purpose` — one sentence
-- `## When to Use` — trigger conditions
-- `## Prerequisites` — what must be installed/configured
-- `## Commands` — copy-pastable shell commands
+Required: `name`, `description`. Optional: `version`,
+`metadata.hermes.tags`, `metadata.hermes.category`.
 ```
 
-- [ ] **Step 3: Write skills/sql-ops/README.md**
+- [ ] **Step 3: Write skills/sql-ops/SKILL.md**
 
-```markdown
-# Skill: sql-ops
+````markdown
+---
+name: sql-ops
+description: Query the ChromaDB SQL vector store and run the turbo-sql-chunk workflow
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [sql, chromadb, rag]
+    category: data
+---
 
-## Purpose
-Query the ChromaDB vector store of SQL stored procedures and run the turbo-sql-chunk workflow.
+# SQL Ops
 
 ## When to Use
 - "Search for stored procedures that handle [topic]"
@@ -321,15 +311,15 @@ Query the ChromaDB vector store of SQL stored procedures and run the turbo-sql-c
 - "Generate a spec for [stored procedure]"
 
 ## Prerequisites
-- `turbo-sql-chunk` repo at `/home/tpanchal/workarea/git_repo/turbo-sql-chunk`
+- `turbo-sql-chunk` repo at `/home/tpanchal/iclr/turbo-sql-chunk`
 - ChromaDB collection `sql_code` reachable at `https://chroma.inteliclear.io`
 - Python venv active: `source venv/bin/activate` (from turbo-sql-chunk root)
 
-## Commands
+## Procedure
 
 ### Health check
 ```bash
-cd /home/tpanchal/workarea/git_repo/turbo-sql-chunk
+cd /home/tpanchal/iclr/turbo-sql-chunk
 python src/run_workflow.py --health-check
 ```
 
@@ -345,27 +335,34 @@ python src/run_workflow.py --sql-folder ./path/to/sql --run
 
 ### Generate a spec for a stored procedure
 ```bash
-# Requires LiteLLM proxy access (already configured via HERMES_API_*)
 python scripts/generate_spec.py --input path/to/sp.sql --schema post_trade.settlement
 ```
 
-## ChromaDB Collection
-- **Collection:** `sql_code`
-- **Dimensions:** 384 (cosine similarity)
-- **Documents:** 17K+
+## Reference
+- **Collection:** `sql_code` (384-dim, cosine, 17K+ docs)
 - **Auth token:**
   ```bash
   kubectl get secret chromadb-auth-secret -n chromadb -o jsonpath='{.data.token}' | base64 -d
   ```
-```
 
-- [ ] **Step 4: Write skills/cluster-ops/README.md**
+## Verification
+`python src/run_workflow.py --health-check` reports the ChromaDB connection as healthy and the collection document count as non-zero.
+````
 
-```markdown
-# Skill: cluster-ops
+- [ ] **Step 4: Write skills/cluster-ops/SKILL.md**
 
-## Purpose
-Operate the ICLR k3s cluster: health checks, GitOps workflow, Longhorn storage, Traefik ingress.
+````markdown
+---
+name: cluster-ops
+description: Operate the ICLR k3s cluster — health, GitOps, Longhorn, Traefik
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [k3s, kubernetes, gitops, devops]
+    category: infrastructure
+---
+
+# Cluster Ops
 
 ## When to Use
 - "Check cluster health"
@@ -379,7 +376,7 @@ Operate the ICLR k3s cluster: health checks, GitOps workflow, Longhorn storage, 
 - SSH key `~/.ssh/iclr-dg-build` for node access
 - GitOps repo at `/home/tpanchal/iclr/glowing-octo-palm-tree`
 
-## Commands
+## Procedure
 
 ### Cluster health (GOOD / DEGRADED / CRITICAL)
 ```bash
@@ -387,24 +384,11 @@ cd /home/tpanchal/iclr/glowing-octo-palm-tree
 ./scripts/health/py/cluster_health_check.py --json
 ```
 
-### All nodes status
+### Nodes / Longhorn / LiteLLM / Traefik
 ```bash
 kubectl get nodes -o wide
-```
-
-### Longhorn health
-```bash
 kubectl get pods -n longhorn-system
-kubectl get volumes.longhorn.io -n longhorn-system
-```
-
-### LiteLLM proxy health
-```bash
 kubectl -n litellm rollout status deploy/litellm
-```
-
-### Traefik status
-```bash
 kubectl get pods -n traefik
 kubectl get ingressroutes -A
 ```
@@ -421,33 +405,35 @@ kubectl apply -f manifests/<service>/
 python3 scripts/maintenance/detect-drift.py --dry-run
 ```
 
-### SSH to a cluster node
+### SSH to a node / DGX Spark
 ```bash
-ssh -i ~/.ssh/iclr-dg-build icadm@10.5.1.58   # iclr-k3s-04
-```
-
-### SSH to DGX Spark
-```bash
+ssh -i ~/.ssh/iclr-dg-build icadm@10.5.1.58
 ssh -i ~/.ssh/iclr-dgx-spark tpanchal@10.5.1.49
 ```
 
-## Adding a New Traefik Ingress
-1. Create manifests under `manifests/<service>/`
-2. Add DNS CNAME on `iclr-dc2.iclr.local` (10.5.2.20) via PowerShell:
-   ```powershell
-   Add-DnsServerResourceRecordCName -ZoneName "inteliclear.io" -Name "<subdomain>" -HostNameAlias "traefik.inteliclear.io"
-   ```
-3. `kubectl apply -f manifests/<service>/ --dry-run=server`
-4. `kubectl apply -f manifests/<service>/`
-```
+## Pitfalls
+- Traefik MUST keep 10.5.1.80 (DNS depends on it).
+- Never use NodePort/hostPort — ingress via Traefik + MetalLB only.
+- git-crypt'd services (Kutt, PrivateBin, Passbolt) need `git-crypt unlock` before apply.
 
-- [ ] **Step 5: Write skills/general/README.md**
+## Verification
+`cluster_health_check.py --json` returns `"status": "GOOD"` (0 failures).
+````
 
-```markdown
-# Skill: general
+- [ ] **Step 5: Write skills/general/SKILL.md**
 
-## Purpose
-General engineering tasks: code review, git workflow, structured debugging, structured logging.
+````markdown
+---
+name: general
+description: General engineering — code review, git workflow, debugging, logging
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [git, review, debugging, python]
+    category: engineering
+---
+
+# General Engineering
 
 ## When to Use
 - "Review this code"
@@ -456,89 +442,55 @@ General engineering tasks: code review, git workflow, structured debugging, stru
 - "Add logging to this function"
 
 ## Code Review Checklist
-
-Before approving any PR:
 1. **Correctness** — does it do what it claims?
-2. **Security** — SQL injection, command injection, plaintext secrets, OWASP top 10?
+2. **Security** — SQL/command injection, plaintext secrets, OWASP top 10?
 3. **Error handling** — are external calls wrapped? Is only the happy path tested?
 4. **Tests** — does coverage exist for the new path? Are mocks realistic?
 5. **Naming** — are functions/variables self-describing?
-6. **Scope** — does the PR do more than described in the ticket?
+6. **Scope** — does the PR do more than the ticket describes?
 
 ## Git Workflow
-
 ```bash
-# Create a feature branch
 git checkout -b feat/<short-description>
-
-# Conventional commit format
-git commit -m "feat: add X"     # new feature
-git commit -m "fix: correct Y"  # bug fix
-git commit -m "chore: update Z" # non-functional change
-git commit -m "docs: clarify W" # documentation only
-
-# Open a PR
-gh pr create --title "feat: add X" --body "## Summary\n- Added X\n\n## Test plan\n- [ ] Manual test: run Y, expect Z"
-
-# Merge after approval
+git commit -m "feat: add X"     # feat | fix | chore | docs
+gh pr create --title "feat: add X" --body "## Summary\n- ...\n\n## Test plan\n- [ ] ..."
 gh pr merge --squash
 ```
 
 ## Structured Debugging
-
-When something is broken:
-1. **Reproduce** — write the smallest case that triggers the bug
-2. **Isolate** — binary search: which component is the source?
+1. **Reproduce** — smallest case that triggers the bug
+2. **Isolate** — binary search to the source component
 3. **Hypothesize** — one hypothesis at a time
-4. **Test** — change one variable, observe result
-5. **Document** — capture root cause and fix in commit message, not in comments
+4. **Test** — change one variable, observe
+5. **Document** — root cause + fix in the commit message
 
 ## Structured Logging (Python)
-
 ```python
 import logging
-
 log = logging.getLogger(__name__)
-
-# Include structured context in extra= dict
-log.info("operation started", extra={"item": item_id, "user": user_id})
-log.warning("retry attempt", extra={"attempt": n, "error": str(e)})
+log.info("operation started", extra={"item": item_id})
 log.error("operation failed", extra={"error": str(e), "item": item_id})
 ```
+Never use `print()` for operational logging.
 
-Never use `print()` for operational logging — it has no level filtering or structured output.
-```
+## Verification
+The change has a test that fails before and passes after, and `git log` shows a conventional-commit message describing the root cause.
+````
 
-- [ ] **Step 6: Write skills/INDEX.json**
-
-```json
-{
-  "sql-ops": "skills/sql-ops/README.md",
-  "cluster-ops": "skills/cluster-ops/README.md",
-  "general": "skills/general/README.md"
-}
-```
-
-- [ ] **Step 7: Verify directory structure**
+- [ ] **Step 6: Verify structure and frontmatter**
 
 ```bash
-find skills/ -type f | sort
+find skills/ -name SKILL.md | sort
+for f in skills/*/SKILL.md; do head -1 "$f" | grep -q '^---$' && echo "OK: $f" || echo "BAD frontmatter: $f"; done
 ```
 
-Expected output:
-```text
-skills/INDEX.json
-skills/README.md
-skills/cluster-ops/README.md
-skills/general/README.md
-skills/sql-ops/README.md
-```
+Expected: three `SKILL.md` paths listed, each printing `OK:`.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add skills/
-git commit -m "feat: add sql-ops, cluster-ops, and general skills with INDEX.json"
+git commit -m "feat: add sql-ops, cluster-ops, general SKILL.md files"
 ```
 
 ---
@@ -550,8 +502,8 @@ git commit -m "feat: add sql-ops, cluster-ops, and general skills with INDEX.jso
 - Create: `examples/sdk_typescript.ts`
 
 **Interfaces:**
-- Consumes: `HERMES_API_BASE`, `HERMES_API_KEY`, `HERMES_MODEL_ALIAS` from environment (defined in Task 2)
-- Endpoint: `$HERMES_API_BASE/chat/completions` — `HERMES_API_BASE` already includes `/v1`, so the full URL is `https://litellm.inteliclear.io/v1/chat/completions`
+- Consumes: `HERMES_API_BASE`, `HERMES_API_KEY`, `HERMES_MODEL_ALIAS` from environment (Task 2).
+- Endpoint: `$HERMES_API_BASE/chat/completions` (base already ends in `/v1`).
 
 - [ ] **Step 1: Create directory**
 
@@ -606,14 +558,12 @@ print(data["choices"][0]["message"]["content"])
 ```typescript
 /**
  * Minimal example: call the ICLR LiteLLM proxy directly via HTTP.
+ * Uses native fetch (Node.js 20+ / the Node 22 Hermes installs) — no deps.
  *
  * Usage:
  *   source .env   # sets HERMES_API_BASE, HERMES_API_KEY, HERMES_MODEL_ALIAS
- *   npm install node-fetch
- *   npx ts-node examples/sdk_typescript.ts
+ *   npx tsx examples/sdk_typescript.ts
  */
-import fetch from 'node-fetch';
-
 const baseURL = process.env.HERMES_API_BASE;
 const apiKey = process.env.HERMES_API_KEY;
 const model = process.env.HERMES_MODEL_ALIAS ?? 'reasoning';
@@ -644,14 +594,13 @@ if (!resp.ok) {
 
 interface ChatResponse {
   choices: [{ message: { content: string } }];
-  model: string;
 }
 
-const data = await resp.json() as ChatResponse;
+const data = (await resp.json()) as ChatResponse;
 console.log(data.choices[0].message.content);
 ```
 
-- [ ] **Step 4: Verify Python example syntax**
+- [ ] **Step 4: Verify Python syntax**
 
 ```bash
 python3 -c "import ast; ast.parse(open('examples/sdk_python.py').read()); print('syntax OK')"
@@ -659,14 +608,7 @@ python3 -c "import ast; ast.parse(open('examples/sdk_python.py').read()); print(
 
 Expected: `syntax OK`
 
-- [ ] **Step 5: Verify TypeScript example syntax (if tsc available)**
-
-```bash
-npx tsc --noEmit --strict --target ES2022 --moduleResolution node examples/sdk_typescript.ts 2>/dev/null \
-  && echo "syntax OK" || echo "tsc not available or type errors — review manually"
-```
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add examples/
@@ -681,10 +623,8 @@ git commit -m "feat: add Python and TypeScript LiteLLM proxy examples"
 - Create: `setup.sh`
 
 **Interfaces:**
-- Consumes: `.env.example` (Task 2), `memory/` (Task 3), `skills/` (Task 4)
-- Produces: `~/.hermes/memory/MEMORY.md`, `~/.hermes/memory/USER.md`, `~/.hermes/skills/iclr → skills/`, `skills/INDEX.json` (regenerated), `logs/smoke-test.log`
-
-**Note on Hermes install command (Step 2 of the script):** The exact pip package name (`hermes-agent` below) must be verified against the official Hermes documentation before first run. Confirm at `https://github.com/NousResearch/hermes` or the install guide referenced in `docs/SETUP.md`. The `hermes --version` validation step in the script will immediately catch a wrong package name.
+- Consumes: `.env.example` (Task 2), `memory/` (Task 3), `skills/` (Task 4).
+- Produces: installed `hermes`; `~/.hermes/config.yaml` (model.*); `~/.hermes/.env` (`OPENAI_API_KEY`); `~/.hermes/memories/MEMORY.md` + `USER.md`; `~/.hermes/skills/iclr → <repo>/skills`; `logs/smoke-test.log`.
 
 - [ ] **Step 1: Write setup.sh**
 
@@ -694,8 +634,8 @@ git commit -m "feat: add Python and TypeScript LiteLLM proxy examples"
 # Usage: ./setup.sh [--dry-run] [--verbose]
 set -euo pipefail
 
-HERMES_VERSION="0.1.0"   # ← update here to upgrade; also update docs/SETUP.md
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 
 DRY_RUN=false
 VERBOSE=false
@@ -707,7 +647,7 @@ for arg in "$@"; do
 done
 
 log()  { echo "[setup] $*"; }
-ok()   { echo "[setup] ✓ $*"; }
+ok()   { echo "[setup] OK $*"; }
 warn() { echo "[setup] WARNING: $*" >&2; }
 die()  { echo "[setup] ERROR: $*" >&2; exit 1; }
 
@@ -721,66 +661,65 @@ run() {
   fi
 }
 
-# ─── Step 1: Prerequisites ────────────────────────────────────────────────────
+# --- Step 1: Prerequisites ---------------------------------------------------
 log "Step 1/6: Checking prerequisites..."
 
-for cmd in python3 git curl; do
+for cmd in git curl; do
   command -v "$cmd" &>/dev/null || die "'$cmd' not found. Install it and re-run setup.sh."
 done
 
-PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-PYTHON_MAJOR=$(echo "$PYTHON_VERSION" | cut -d. -f1)
-PYTHON_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
-if [[ "$PYTHON_MAJOR" -lt 3 || ( "$PYTHON_MAJOR" -eq 3 && "$PYTHON_MINOR" -lt 10 ) ]]; then
-  die "Python 3.10+ required (found $PYTHON_VERSION)"
-fi
-
-command -v jq &>/dev/null || warn "'jq' not found — smoke test output will be unformatted (non-fatal)"
-
-ok "Prerequisites satisfied (Python $PYTHON_VERSION)"
-
-# ─── Step 2: Hermes install ───────────────────────────────────────────────────
-log "Step 2/6: Installing Hermes $HERMES_VERSION..."
-
-# IMPORTANT: Verify the pip package name from the official Hermes install guide
-# before first use. Update the pip install command below if the package name differs.
-if command -v hermes &>/dev/null; then
-  INSTALLED=$(hermes --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
-  if [[ "$INSTALLED" == "$HERMES_VERSION" ]]; then
-    ok "Hermes $HERMES_VERSION already installed — skipping"
-  else
-    log "Upgrading Hermes $INSTALLED → $HERMES_VERSION"
-    run pip install "hermes-agent==$HERMES_VERSION"
+if command -v python3 &>/dev/null; then
+  PYV=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+  PMAJ=$(echo "$PYV" | cut -d. -f1); PMIN=$(echo "$PYV" | cut -d. -f2)
+  if [[ "$PMAJ" -lt 3 || ( "$PMAJ" -eq 3 && "$PMIN" -lt 10 ) ]]; then
+    warn "python3 $PYV found; 3.10+ recommended for the smoke test and Python example"
   fi
 else
-  run pip install "hermes-agent==$HERMES_VERSION"
+  warn "python3 not found — smoke-test JSON parsing and the Python example will be unavailable"
+fi
+
+command -v jq &>/dev/null || warn "'jq' not found — non-fatal"
+
+ok "Prerequisites satisfied"
+
+# --- Step 2: Hermes install --------------------------------------------------
+log "Step 2/6: Installing Hermes..."
+
+if command -v hermes &>/dev/null; then
+  ok "Hermes already installed ($(hermes --version 2>/dev/null || echo 'version unknown')) — run 'hermes update' to upgrade"
+else
+  if "$DRY_RUN"; then
+    echo "[dry-run] curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
+  else
+    log "Running official Hermes installer (brings its own Python, Node, ripgrep, ffmpeg)..."
+    curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+    command -v hermes &>/dev/null || die "Hermes install finished but 'hermes' is not on PATH. Open a new shell (or add ~/.local/bin to PATH) and re-run setup.sh."
+  fi
 fi
 
 if ! "$DRY_RUN"; then
-  command -v hermes &>/dev/null || die "Hermes install failed — 'hermes' not found in PATH after install"
+  ok "Hermes ready: $(hermes --version 2>/dev/null || echo 'installed')"
 fi
-ok "Hermes $HERMES_VERSION ready"
 
-# ─── Step 3: Config wiring ────────────────────────────────────────────────────
+# --- Step 3: Config wiring ---------------------------------------------------
 log "Step 3/6: Wiring config..."
 
 ENV_FILE="$REPO_DIR/.env"
+[[ -f "$ENV_FILE" ]] || run cp "$REPO_DIR/.env.example" "$ENV_FILE"
 
-if [[ ! -f "$ENV_FILE" ]]; then
-  run cp "$REPO_DIR/.env.example" "$ENV_FILE"
-  log "Created .env from .env.example"
-fi
-
-# Key resolution: env > .env file > interactive prompt
+# Resolve HERMES_API_KEY: shell env > repo .env > prompt
 if [[ -z "${HERMES_API_KEY:-}" ]]; then
   if grep -q "^HERMES_API_KEY=<" "$ENV_FILE" 2>/dev/null; then
     if "$DRY_RUN"; then
       echo "[dry-run] Would prompt for HERMES_API_KEY"
     else
       echo "Get your key: kubectl get secret litellm-master-key -n litellm -o jsonpath='{.data.key}' | base64 -d"
-      read -rsp "Enter LiteLLM master key: " entered_key
-      echo
-      sed -i "s|^HERMES_API_KEY=.*|HERMES_API_KEY=$entered_key|" "$ENV_FILE"
+      read -rsp "Enter LiteLLM master key: " ENTERED; echo
+      # Rewrite the line safely without regex interpretation of the value.
+      ENTERED="$ENTERED" awk '
+        /^HERMES_API_KEY=/ { print "HERMES_API_KEY=" ENVIRON["ENTERED"]; next }
+        { print }
+      ' "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
     fi
   fi
 fi
@@ -789,147 +728,138 @@ if ! "$DRY_RUN"; then
   chmod 600 "$ENV_FILE"
   # shellcheck source=/dev/null
   source "$ENV_FILE"
+  : "${HERMES_API_BASE:?HERMES_API_BASE missing from .env}"
+  : "${HERMES_API_KEY:?HERMES_API_KEY missing from .env}"
+  HERMES_MODEL_ALIAS="${HERMES_MODEL_ALIAS:-reasoning}"
+
+  mkdir -p "$HERMES_HOME"
+
+  # Model config via the official CLI (writes ~/.hermes/config.yaml).
+  hermes config set model.provider custom
+  hermes config set model.base_url "$HERMES_API_BASE"
+  hermes config set model.default "$HERMES_MODEL_ALIAS"
+
+  # Secret goes in ~/.hermes/.env — direct write, no regex.
+  HERMES_DOTENV="$HERMES_HOME/.env"
+  if [[ -f "$HERMES_DOTENV" ]] && grep -q "^OPENAI_API_KEY=" "$HERMES_DOTENV"; then
+    OPENAI_API_KEY="$HERMES_API_KEY" awk '
+      /^OPENAI_API_KEY=/ { print "OPENAI_API_KEY=" ENVIRON["OPENAI_API_KEY"]; next }
+      { print }
+    ' "$HERMES_DOTENV" > "$HERMES_DOTENV.tmp" && mv "$HERMES_DOTENV.tmp" "$HERMES_DOTENV"
+  else
+    printf 'OPENAI_API_KEY=%s\n' "$HERMES_API_KEY" >> "$HERMES_DOTENV"
+  fi
+  chmod 600 "$HERMES_DOTENV"
+else
+  echo "[dry-run] hermes config set model.provider custom"
+  echo "[dry-run] hermes config set model.base_url \$HERMES_API_BASE"
+  echo "[dry-run] hermes config set model.default \$HERMES_MODEL_ALIAS"
+  echo "[dry-run] write OPENAI_API_KEY to $HERMES_HOME/.env"
 fi
 
-ok "Config wired (.env secured with chmod 600)"
-log "  Tip: Add 'source $ENV_FILE' to your ~/.bashrc or ~/.zshrc"
+ok "Config wired (model.* in config.yaml, OPENAI_API_KEY in ~/.hermes/.env)"
 
-# ─── Step 4: Memory seeding ───────────────────────────────────────────────────
+# --- Step 4: Memory seeding --------------------------------------------------
 log "Step 4/6: Seeding memory..."
 
-HERMES_ROOT="${HERMES_ROOT:-$HOME/.hermes}"
-HERMES_MEM="$HERMES_ROOT/memory"
+MEM="$HERMES_HOME/memories"
+run mkdir -p "$MEM"
+run cp "$REPO_DIR/memory/MEMORY.md" "$MEM/MEMORY.md"
+run cp "$REPO_DIR/memory/USER.md"   "$MEM/USER.md"
 
-run mkdir -p "$HERMES_MEM"
-run cp "$REPO_DIR/memory/MEMORY.md" "$HERMES_MEM/MEMORY.md"
-run cp "$REPO_DIR/memory/USER.md"   "$HERMES_MEM/USER.md"
+ok "Memory seeded to $MEM"
+log "  -> Open $MEM/USER.md and fill in your name and role"
 
-ok "Memory seeded to $HERMES_MEM"
-log "  → Open $HERMES_MEM/USER.md and fill in your name and role"
-
-# ─── Step 5: Skills install ───────────────────────────────────────────────────
+# --- Step 5: Skills install --------------------------------------------------
 log "Step 5/6: Installing skills..."
 
-HERMES_SKILLS="$HERMES_ROOT/skills"
-run mkdir -p "$HERMES_SKILLS"
+SKILLS_DIR="$HERMES_HOME/skills"
+run mkdir -p "$SKILLS_DIR"
+LINK="$SKILLS_DIR/iclr"
 
-LINK="$HERMES_SKILLS/iclr"
-[[ -L "$LINK" ]] && run rm "$LINK"
-
-if ! "$DRY_RUN"; then
+if "$DRY_RUN"; then
+  echo "[dry-run] ln -sfn $REPO_DIR/skills $LINK"
+else
+  [[ -L "$LINK" || -e "$LINK" ]] && rm -rf "$LINK"
   if ln -s "$REPO_DIR/skills" "$LINK" 2>/dev/null; then
-    ok "Skills symlinked: $LINK → $REPO_DIR/skills"
+    ok "Skills symlinked: $LINK -> $REPO_DIR/skills"
   else
-    warn "Symlink failed — falling back to copy (skills won't auto-update on git pull)"
-    run cp -r "$REPO_DIR/skills" "$LINK"
+    warn "Symlink failed — copying instead (skills won't auto-update on git pull)"
+    cp -r "$REPO_DIR/skills" "$LINK"
     ok "Skills copied to $LINK"
   fi
-else
-  echo "[dry-run] ln -s $REPO_DIR/skills $LINK"
 fi
 
-# Regenerate INDEX.json
-if ! "$DRY_RUN"; then
-  python3 - "$REPO_DIR/skills" <<'PYEOF'
-import json, pathlib, sys
-
-skills_dir = pathlib.Path(sys.argv[1])
-index = {
-    d.name: f"skills/{d.name}/README.md"
-    for d in sorted(skills_dir.iterdir())
-    if d.is_dir() and (d / "README.md").exists()
-}
-(skills_dir / "INDEX.json").write_text(json.dumps(index, indent=2) + "\n")
-print(f"INDEX.json: {len(index)} skills registered")
-PYEOF
-else
-  echo "[dry-run] Would regenerate skills/INDEX.json"
-fi
-
-ok "Skills installed"
-
-# ─── Step 6: Smoke test ───────────────────────────────────────────────────────
+# --- Step 6: Smoke test ------------------------------------------------------
 log "Step 6/6: Running smoke test..."
 
 if "$DRY_RUN"; then
-  echo "[dry-run] Would POST to \$HERMES_API_BASE/chat/completions with Bearer token"
+  echo "[dry-run] POST \$HERMES_API_BASE/chat/completions with Bearer token"
 else
-  : "${HERMES_API_BASE:?HERMES_API_BASE not set — did Step 3 fail?}"
-  : "${HERMES_API_KEY:?HERMES_API_KEY not set — did Step 3 fail?}"
-  HERMES_MODEL_ALIAS="${HERMES_MODEL_ALIAS:-reasoning}"
-
   mkdir -p "$REPO_DIR/logs"
   LOG="$REPO_DIR/logs/smoke-test.log"
-  TMP_RESP=$(mktemp)
+  TMP=$(mktemp)
 
-  START_NS=$(date +%s%N 2>/dev/null || echo 0)
-  HTTP_STATUS=$(curl -s -o "$TMP_RESP" -w "%{http_code}" \
+  START=$(date +%s%N 2>/dev/null || echo 0)
+  STATUS=$(curl -s -o "$TMP" -w "%{http_code}" \
     -X POST "$HERMES_API_BASE/chat/completions" \
     -H "Authorization: Bearer $HERMES_API_KEY" \
     -H "Content-Type: application/json" \
-    -d "{\"model\":\"$HERMES_MODEL_ALIAS\",\"max_tokens\":10,\"messages\":[{\"role\":\"user\",\"content\":\"What is the capital of France?\"}]}" \
-  )
-  END_NS=$(date +%s%N 2>/dev/null || echo 0)
-  LATENCY_MS=$(( (END_NS - START_NS) / 1000000 ))
+    -d "{\"model\":\"$HERMES_MODEL_ALIAS\",\"max_tokens\":10,\"messages\":[{\"role\":\"user\",\"content\":\"What is the capital of France?\"}]}" )
+  END=$(date +%s%N 2>/dev/null || echo 0)
+  MS=$(( (END - START) / 1000000 ))
 
-  RESOLVED=$(python3 -c "import json; d=json.load(open('$TMP_RESP')); print(d.get('model','unknown'))" 2>/dev/null || echo "unknown")
-  rm -f "$TMP_RESP"
+  if command -v python3 &>/dev/null; then
+    RESOLVED=$(python3 -c "import json; print(json.load(open('$TMP')).get('model','unknown'))" 2>/dev/null || echo "unknown")
+  else
+    RESOLVED="unknown (python3 not available)"
+  fi
+  rm -f "$TMP"
 
   {
     echo "=== Smoke test $(date -Iseconds) ==="
-    echo "HTTP status:     $HTTP_STATUS"
-    echo "Latency:         ${LATENCY_MS}ms"
-    echo "Resolved model:  $RESOLVED"
-    echo "Alias used:      $HERMES_MODEL_ALIAS"
+    echo "HTTP status:    $STATUS"
+    echo "Latency:        ${MS}ms"
+    echo "Resolved model: $RESOLVED"
+    echo "Alias used:     $HERMES_MODEL_ALIAS"
   } | tee -a "$LOG"
 
-  if [[ "$HTTP_STATUS" != "200" ]]; then
-    die "Smoke test failed (HTTP $HTTP_STATUS). Check HERMES_API_KEY and LiteLLM proxy: kubectl -n litellm rollout status deploy/litellm"
-  fi
-
-  ok "Smoke test passed (HTTP $HTTP_STATUS, ${LATENCY_MS}ms, model: $RESOLVED)"
+  [[ "$STATUS" == "200" ]] || die "Smoke test failed (HTTP $STATUS). Check the key and proxy: kubectl -n litellm rollout status deploy/litellm"
+  ok "Smoke test passed (HTTP $STATUS, ${MS}ms, model: $RESOLVED)"
 fi
 
 echo
-printf '╔══════════════════════════════════════════════════╗\n'
-printf '║  Setup complete! Next steps:                    ║\n'
-printf "║  1. Fill in ~/.hermes/memory/USER.md            ║\n"
-printf "║  2. source %s\n" "$ENV_FILE"
-printf '║  3. hermes start                                ║\n'
-printf '╚══════════════════════════════════════════════════╝\n'
+log "Setup complete. Next steps:"
+log "  1. Fill in $HERMES_HOME/memories/USER.md"
+log "  2. Run: hermes"
 ```
 
-- [ ] **Step 2: Make executable**
+- [ ] **Step 2: Make executable and check shebang**
 
 ```bash
 chmod +x setup.sh
-```
-
-- [ ] **Step 3: Verify shebang**
-
-```bash
 head -1 setup.sh
 ```
 
 Expected: `#!/usr/bin/env bash`
 
-- [ ] **Step 4: Dry-run test**
+- [ ] **Step 3: Dry-run test**
 
 ```bash
 ./setup.sh --dry-run --verbose
 ```
 
-Expected: prints `[dry-run]` lines for each step, exits 0, no files written.
+Expected: prints `[dry-run]` lines for each of the 6 steps, exits 0, no files written, no network calls.
 
-- [ ] **Step 5: Lint**
+- [ ] **Step 4: Lint**
 
 ```bash
 shellcheck setup.sh
 ```
 
-Expected: exit 0. Acceptable warnings: SC2034 (unused vars), SC1091 (source not following). Fix any SC2086 (unquoted variables) or SC2059 (printf format string) errors.
+Expected: exit 0. Acceptable: SC1090/SC1091 (source not followed). Fix any SC2086 (unquoted vars).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit and push**
 
 ```bash
 git add setup.sh
@@ -946,40 +876,39 @@ git push
 - Create: `docs/SETUP.md`
 
 **Interfaces:**
-- Consumes: all files created in Tasks 1–6 (references their paths and commands)
+- Consumes: all files from Tasks 1–6 (references their paths and commands).
 
 - [ ] **Step 1: Write README.md**
 
-```markdown
+````markdown
 # engineering-hermes-agent
 
-Bootstrap repo for the ICLR team Hermes agent. One command to install, configure, and verify.
+Bootstrap repo for the ICLR team Hermes agent. One command to install Hermes,
+wire it to the ICLR LiteLLM proxy, seed team memory, and load skills.
 
 ## Quickstart
 
 ```bash
-git clone https://github.com/inteliclear/engineering-hermes-agent
-cd engineering-hermes-agent
-chmod +x setup.sh
+git clone https://github.com/inteliclear/engineering-hermes-agent ~/iclr/engineering-hermes-agent
+cd ~/iclr/engineering-hermes-agent
 ./setup.sh
 ```
 
 `setup.sh` will:
-1. Verify prerequisites (Python 3.10+, git, curl)
-2. Install Hermes (pinned version)
-3. Create `.env` and prompt for your LiteLLM key
-4. Seed team memory into `~/.hermes/memory/`
-5. Install skills into `~/.hermes/skills/`
+1. Verify prerequisites (git, curl; python3 recommended)
+2. Install Hermes via the official installer (`curl ... | bash`)
+3. Map your `.env` into Hermes config (`~/.hermes/config.yaml` + `~/.hermes/.env`)
+4. Seed team memory into `~/.hermes/memories/`
+5. Symlink skills into `~/.hermes/skills/`
 6. Run a smoke test against the LiteLLM proxy
 
-After setup, fill in `~/.hermes/memory/USER.md` with your name and role, then:
+Then fill in `~/.hermes/memories/USER.md` and run:
 
 ```bash
-source .env
-hermes start
+hermes
 ```
 
-## LiteLLM Model Aliases
+## Model Aliases
 
 | Alias | Model | Use for |
 |-------|-------|---------|
@@ -989,17 +918,18 @@ hermes start
 | `fast` | Qwen3-4B (Vulkan) | Quick lookups, low latency |
 | `coder_pro` | AEON Qwen3.6-27B (DGX Spark) | Heavy coding, long context |
 
-Change your alias in `.env`: `HERMES_MODEL_ALIAS=coding`
+Change it in `.env` (`HERMES_MODEL_ALIAS=coding`) and re-run `./setup.sh`,
+or run `hermes config set model.default coding` directly.
 
 ## Skills
 
-| Skill | Trigger | Covers |
-|-------|---------|--------|
-| `sql-ops` | "query chromadb", "search procedures" | ChromaDB queries, SQL chunking workflow |
-| `cluster-ops` | "check cluster", "deploy", "drain" | k3s health, GitOps, Longhorn, Traefik |
-| `general` | "review code", "debug", "git" | Code review, git workflow, debugging |
+| Skill | Covers |
+|-------|--------|
+| `sql-ops` | ChromaDB queries, SQL chunking workflow |
+| `cluster-ops` | k3s health, GitOps, Longhorn, Traefik |
+| `general` | Code review, git workflow, debugging |
 
-See [skills/README.md](skills/README.md) for the full catalog and how to add new skills.
+Hermes auto-discovers these `SKILL.md` files. See [skills/README.md](skills/README.md).
 
 ## Getting Your LiteLLM Key
 
@@ -1009,39 +939,33 @@ kubectl get secret litellm-master-key -n litellm -o jsonpath='{.data.key}' | bas
 
 ## Docs
 
-- [Platform-specific setup guide](docs/SETUP.md) — Windows/WSL, macOS, Linux
-- [Design spec](docs/superpowers/specs/2026-06-20-hermes-agent-design.md) — full architecture and decisions
-```
+- [Platform setup guide](docs/SETUP.md) — Windows/WSL, macOS, Linux
+- [Design spec](docs/superpowers/specs/2026-06-20-hermes-agent-design.md)
+````
 
-- [ ] **Step 2: Create docs directory and write docs/SETUP.md**
+- [ ] **Step 2: Create docs dir and write docs/SETUP.md**
 
-```markdown
+````markdown
 # Setup Guide
 
-Platform-specific setup steps for `engineering-hermes-agent`.
+Platform-specific setup for `engineering-hermes-agent`.
 
 ## Prerequisites
 
-| Tool | Version | Install |
-|------|---------|---------|
-| Python | 3.10+ | `apt install python3` / `brew install python3` |
-| git | any | `apt install git` / `brew install git` |
-| curl | any | `apt install curl` |
-| jq (optional) | any | `apt install jq` / `brew install jq` |
+Only **git** and **curl** are strictly required — the Hermes installer brings
+its own Python 3.11, Node 22, ripgrep, and ffmpeg. `python3` (3.10+) on the
+host is recommended for the smoke test and the Python example.
 
-## Linux (Ubuntu/Debian)
+| Tool | Required | Install |
+|------|----------|---------|
+| git | yes | `apt install git` / `brew install git` |
+| curl | yes | `apt install curl` / preinstalled on macOS |
+| python3 | recommended | `apt install python3` / `brew install python3` |
+| jq | optional | `apt install jq` / `brew install jq` |
 
-```bash
-sudo apt update && sudo apt install -y python3 python3-pip git curl jq
-git clone https://github.com/inteliclear/engineering-hermes-agent ~/iclr/engineering-hermes-agent
-cd ~/iclr/engineering-hermes-agent
-./setup.sh
-```
-
-## macOS
+## Linux / macOS
 
 ```bash
-brew install python3 git curl jq
 git clone https://github.com/inteliclear/engineering-hermes-agent ~/iclr/engineering-hermes-agent
 cd ~/iclr/engineering-hermes-agent
 ./setup.sh
@@ -1049,83 +973,74 @@ cd ~/iclr/engineering-hermes-agent
 
 ## Windows (WSL2 — recommended)
 
-Open a WSL2 Ubuntu terminal:
+Run inside a WSL2 Ubuntu terminal, cloning into the **Linux** filesystem:
 
 ```bash
-sudo apt update && sudo apt install -y python3 python3-pip git curl jq
 git clone https://github.com/inteliclear/engineering-hermes-agent ~/iclr/engineering-hermes-agent
 cd ~/iclr/engineering-hermes-agent
 ./setup.sh
 ```
 
-**WSL2 note:** Clone inside the WSL2 filesystem (`~/`) — not on `/mnt/c/` or `/mnt/d/`.
-Cloning on a Windows path disables symlinks, so skills will fall back to a copy and won't auto-update on `git pull`.
+**WSL2 note:** clone under `~/` — not `/mnt/c/` or `/mnt/d/`. Windows paths
+disable symlinks, so skills fall back to a copy and won't auto-update on
+`git pull`.
+
+Native Windows (no WSL) uses the PowerShell installer
+(`iex (irm https://hermes-agent.nousresearch.com/install.ps1)`); `setup.sh`
+is a bash script and expects WSL2/Git Bash.
+
+## How Config Maps to Hermes
+
+`setup.sh` translates the repo's `.env` into Hermes' native files:
+
+| Repo `.env` | Hermes |
+|-------------|--------|
+| `HERMES_API_BASE` | `~/.hermes/config.yaml` → `model.base_url` |
+| `HERMES_MODEL_ALIAS` | `~/.hermes/config.yaml` → `model.default` |
+| `HERMES_API_KEY` | `~/.hermes/.env` → `OPENAI_API_KEY` |
 
 ## Getting the LiteLLM Key
-
-Requires `kubectl` configured for the ICLR cluster:
 
 ```bash
 kubectl get secret litellm-master-key -n litellm -o jsonpath='{.data.key}' | base64 -d
 ```
 
-If you don't have cluster access, ask a cluster admin to share the key.
-
-## Persistent Env (Shell RC)
-
-After setup, add to `~/.bashrc` or `~/.zshrc`:
-
-```bash
-source ~/iclr/engineering-hermes-agent/.env
-```
-
-This makes `HERMES_API_KEY` and friends available in every new shell.
+If you lack cluster access, ask a cluster admin for the key.
 
 ## Upgrading Hermes
 
 ```bash
-cd ~/iclr/engineering-hermes-agent
-git pull
-./setup.sh   # detects version mismatch in HERMES_VERSION and reinstalls
+hermes update
 ```
 
-## Updating Skills
+## Updating Skills / Memory
 
 ```bash
 cd ~/iclr/engineering-hermes-agent
 git pull
-# Skills update automatically via symlink — no setup.sh re-run needed
-# Re-run setup.sh only if INDEX.json needs regenerating (new skill directories)
+# Skills update automatically via the symlink.
+# Re-run ./setup.sh only to refresh seeded memory or re-create the symlink.
 ```
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
-| `hermes: command not found` after install | Add `~/.local/bin` to PATH: `export PATH="$HOME/.local/bin:$PATH"` |
-| Smoke test HTTP 401 | Wrong `HERMES_API_KEY` — re-fetch with `kubectl get secret...` |
-| Smoke test HTTP 502 | LiteLLM proxy down: `kubectl -n litellm rollout status deploy/litellm` |
-| Smoke test HTTP 404 | Wrong endpoint — confirm `HERMES_API_BASE` ends in `/v1` |
-| Skills symlink not working | Clone inside WSL2 filesystem, not `/mnt/c/...` |
-| `HERMES_API_KEY not set` error | `source .env` in current shell, or add to shell rc |
-| `hermes start` fails | Check Hermes version matches `HERMES_VERSION` in setup.sh |
-```
+| `hermes: command not found` after install | Open a new shell, or add `~/.local/bin` to PATH |
+| Smoke test HTTP 401 | Wrong key — re-fetch with `kubectl get secret...` and re-run setup.sh |
+| Smoke test HTTP 404 | Confirm `HERMES_API_BASE` ends in `/v1` (path is `/v1/chat/completions`) |
+| Smoke test HTTP 502 | Proxy down: `kubectl -n litellm rollout status deploy/litellm` |
+| Skills not picked up | Confirm `~/.hermes/skills/iclr` exists and points at the repo |
+| Symlink fell back to copy | Clone inside the WSL2 Linux filesystem, not `/mnt/...` |
+````
 
-- [ ] **Step 3: Verify docs directory**
-
-```bash
-ls docs/
-```
-
-Expected: `SETUP.md` present.
-
-- [ ] **Step 4: Final repo structure check**
+- [ ] **Step 3: Final structure check**
 
 ```bash
-find . -not -path './.git/*' -type f | sort
+find . -not -path './.git/*' -not -path './docs/superpowers/*' -type f | sort
 ```
 
-Expected files:
+Expected:
 ```text
 ./.env.example
 ./.gitignore
@@ -1136,28 +1051,27 @@ Expected files:
 ./memory/MEMORY.md
 ./memory/USER.md
 ./setup.sh
-./skills/INDEX.json
 ./skills/README.md
-./skills/cluster-ops/README.md
-./skills/general/README.md
-./skills/sql-ops/README.md
+./skills/cluster-ops/SKILL.md
+./skills/general/SKILL.md
+./skills/sql-ops/SKILL.md
 ```
 
-- [ ] **Step 5: Commit and push**
+- [ ] **Step 4: Commit and push**
 
 ```bash
-git add README.md docs/
-git commit -m "docs: add README quickstart and platform-specific SETUP.md"
+git add README.md docs/SETUP.md
+git commit -m "docs: add README quickstart and platform SETUP guide"
 git push
 ```
 
-- [ ] **Step 6: Verify repo is live on GitHub**
+- [ ] **Step 5: Verify live on GitHub**
 
 ```bash
 gh repo view inteliclear/engineering-hermes-agent --web
 ```
 
-Expected: GitHub page opens, all files visible.
+Expected: all files visible.
 
 ---
 
@@ -1168,20 +1082,23 @@ Expected: GitHub page opens, all files visible.
 | Spec section | Covered by |
 |-------------|-----------|
 | §1 One-command install | Task 6 (setup.sh) |
-| §1 LiteLLM integration | Task 2 (.env.example) + Task 6 Step 6 (smoke test) |
-| §1 Shared memory seed | Task 3 (memory/) + Task 6 Step 4 |
-| §1 Skills | Task 4 (skills/) + Task 6 Step 5 |
-| §2 Architecture | Task 7 (README.md diagram) |
-| §3 Repo layout | All tasks — final verified in Task 7 Step 4 |
-| §4 .env.example | Task 2 |
-| §5 setup.sh 6 steps | Task 6 |
-| §5 --dry-run/--verbose | Task 6 (built into setup.sh) |
-| §6 Skills INDEX.json | Task 4 Step 6 + Task 6 Step 5 (regeneration) |
-| §7 Python example | Task 5 |
-| §7 TypeScript example | Task 5 |
-| §8 Operational notes | Task 7 (docs/SETUP.md) |
-| §9 What this doesn't do | Task 7 (README.md) |
+| §2 Hermes config mapping | Task 6 Step 3 (hermes config set + ~/.hermes/.env) |
+| §3 Architecture | Task 7 (README) |
+| §4 Repo layout | All tasks — verified Task 7 Step 3 |
+| §5 .env.example + mapping | Task 2 + Task 6 Step 3 |
+| §6 setup.sh 6 steps + flags | Task 6 |
+| §7 SKILL.md format + discovery | Task 4 |
+| §8 Examples (chat/completions, native fetch) | Task 5 |
+| §9 Operational notes | Task 7 (SETUP.md) |
+| §10 What it doesn't do | Task 7 (README) |
 
-**Bug fixed from spec:** The spec's example scripts used `f"{base_url}/v1/messages"` which would produce `https://litellm.inteliclear.io/v1/v1/messages` (double `/v1`). The plan uses `f"{base_url}/chat/completions"` — correct for the OpenAI-compatible LiteLLM endpoint with `HERMES_API_BASE` including `/v1`.
+**Corrections applied vs the prior plan revision:**
+- Install is the official curl script, not `pip install hermes-agent`; no version pin (use `hermes update`).
+- Skills are `SKILL.md` with frontmatter, not `README.md`; `INDEX.json` removed (Hermes auto-discovers).
+- Model config via `hermes config set`; key written directly to `~/.hermes/.env` — **the sed-injection bug is gone** (awk with `ENVIRON`, no regex on the value).
+- Memory dir is `~/.hermes/memories/` (plural).
+- turbo-sql-chunk path corrected to `/home/tpanchal/iclr/turbo-sql-chunk`.
+- TypeScript example uses native `fetch` (no `node-fetch`).
+- Endpoint is `$HERMES_API_BASE/chat/completions` (no `/v1/messages` double-prefix).
 
-**No placeholders found** except the explicit Hermes package name note in Task 6 Step 1, which is an action item (verify from Hermes docs), not a deferred design decision.
+**No placeholders remain.** Every code/command step contains the actual content.
