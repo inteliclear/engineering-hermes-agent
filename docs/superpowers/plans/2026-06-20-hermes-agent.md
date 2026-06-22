@@ -713,7 +713,7 @@ if [[ -z "${HERMES_API_KEY:-}" ]]; then
     if "$DRY_RUN"; then
       echo "[dry-run] Would prompt for HERMES_API_KEY"
     else
-      echo "Get your key: kubectl get secret litellm-master-key -n litellm -o jsonpath='{.data.key}' | base64 -d"
+      echo "Get your key: kubectl get secret litellm-secret -n litellm -o jsonpath='{.data.LITELLM_MASTER_KEY}' | base64 -d"
       read -rsp "Enter LiteLLM master key: " ENTERED; echo
       # Rewrite the line safely without regex interpretation of the value.
       ENTERED="$ENTERED" awk '
@@ -934,7 +934,7 @@ Hermes auto-discovers these `SKILL.md` files. See [skills/README.md](skills/READ
 ## Getting Your LiteLLM Key
 
 ```bash
-kubectl get secret litellm-master-key -n litellm -o jsonpath='{.data.key}' | base64 -d
+kubectl get secret litellm-secret -n litellm -o jsonpath='{.data.LITELLM_MASTER_KEY}' | base64 -d
 ```
 
 ## Docs
@@ -1002,7 +1002,7 @@ is a bash script and expects WSL2/Git Bash.
 ## Getting the LiteLLM Key
 
 ```bash
-kubectl get secret litellm-master-key -n litellm -o jsonpath='{.data.key}' | base64 -d
+kubectl get secret litellm-secret -n litellm -o jsonpath='{.data.LITELLM_MASTER_KEY}' | base64 -d
 ```
 
 If you lack cluster access, ask a cluster admin for the key.

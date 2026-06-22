@@ -55,7 +55,7 @@ iex (irm https://hermes-agent.nousresearch.com/install.ps1)
 The setup script will prompt for your LiteLLM master key. To retrieve it:
 
 ```bash
-kubectl get secret litellm-master-key -n litellm -o jsonpath='{.data.key}' | base64 -d
+kubectl get secret litellm-secret -n litellm -o jsonpath='{.data.LITELLM_MASTER_KEY}' | base64 -d
 ```
 
 You can also pass it as an environment variable to skip the prompt:
@@ -94,7 +94,7 @@ hermes update
 Your master key is likely wrong. Get the current key:
 
 ```bash
-kubectl get secret litellm-master-key -n litellm -o jsonpath='{.data.key}' | base64 -d
+kubectl get secret litellm-secret -n litellm -o jsonpath='{.data.LITELLM_MASTER_KEY}' | base64 -d
 ```
 
 ### Smoke test fails — check the proxy
