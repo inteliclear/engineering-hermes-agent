@@ -1,10 +1,10 @@
 ---
 name: cluster-ops
-description: Shortcuts and commands for k3s cluster maintenance
+description: ICLR k3s cluster maintenance — health checks, rolling updates, drift detection, and GitOps manifest deployment
+version: 1.0.0
 metadata:
-  version: 1.0.0
-  owner: tpanchal
-license: internal-only
+  hermes.tags: [k3s, gitops, maintenance]
+  hermes.category: infrastructure
 ---
 
 # Cluster Ops

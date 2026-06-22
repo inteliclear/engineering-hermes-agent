@@ -1,37 +1,56 @@
 ---
 name: sql-ops
-description: Shortcuts and commands for database operations
+description: Turbo SQL Chunk pipeline operations — workflow commands, ChromaDB vector store, and SQL RAG markers
+version: 1.0.0
 metadata:
-  version: 1.0.0
-  owner: tpanchal
-license: internal-only
+  hermes.tags: [turbo-sql-chunk, chromadb, sql-rag]
+  hermes.category: pipeline
 ---
 
-# SQL Ops
+# SQL Ops (Turbo SQL Chunk Pipeline)
 
 ## Overview
-Database operations for SQL Server instances in the ICLR cluster. Covers connection details, schema exploration, and SQL pipeline references.
+Operations for the `turbo-sql-chunk` pipeline that chunks SQL stored procedures into a ChromaDB vector store for RAG. Covers workflow commands, collection management, and pipeline markers.
 
 ## When to Use
-- Connecting to SQL Server instances
-- Exploring stored procedures or schema
-- Working with the turbo-sql-chunk pipeline
-- Querying post-trade operational data
+- Running or diagnosing the turbo-sql-chunk workflow
+- Managing ChromaDB collections or vector store state
+- Regenerating specs or checking pipeline health
+- Working with SQL RAG markers: `run_workflow`, `generate_spec`, `sql_code`, `chroma`
 
-## SQL Server Instances
+## Repository
 
-| Instance | IP | Port | Notes |
-|----------|----|------|-------|
-| SQL Server 2022 | 10.5.1.84 | 1433 | Running on iclr-longhorn-04 |
-| SQL Server 2025 | 10.5.1.85 | 1433 | Running on iclr-longhorn-05 |
+- **Path:** `/home/tpanchal/iclr/turbo-sql-chunk`
 
-## SQL Source Files (Proprietary)
+## Pipeline Markers
 
-- **Windows path:** `D:\IC\GitRepo\DB\SQL`
-- **WSL path:** `/mnt/d/IC/GitRepo/DB\SQL`
-- **IMPORTANT:** Never read, cat, or display the contents of any file under this path. These are production stored procedures containing proprietary business logic.
+| Marker | Purpose |
+|--------|---------|
+| `run_workflow` | Triggers the end-to-end pipeline |
+| `generate_spec` | Regenerates OpenSpec files from stored procedures |
+| `sql_code` | Identifies SQL code chunks in the vector store |
+| `chroma` | ChromaDB collection and connection references |
 
-## SQL Pipeline
+## Workflow Commands
 
-- **Repo:** `/home/tpanchal/iclr/turbo-sql-chunk`
-- Purpose: Chunks SQL stored procedures → ChromaDB vector store for RAG
+```bash
+# Health check the pipeline
+python3 src/run_workflow.py --health-check
+
+# Generate specs from stored procedures
+python3 scripts/generate_spec.py
+
+# Full workflow run
+python3 src/run_workflow.py
+```
+
+## ChromaDB
+
+- **Collection:** `sql_code`
+- **Endpoint:** `https://chroma.inteliclear.io`
+- **Auth secret:** `kubectl get secret chromadb-auth-secret -n chromadb -o jsonpath='{.data.token}' | base64 -d`
+
+## Critical Rules
+- SQL source files at `/mnt/d/IC/GitRepo/DB/SQL` are **proprietary** — never cat or display contents
+- ChromaDB collection `sql_code` is the ground truth for RAG chunks
+- Always run `--health-check` before a full workflow to catch upstream drift

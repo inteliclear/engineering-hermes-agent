@@ -1,10 +1,10 @@
 ---
 name: general
-description: Shortcuts and commands for general development tasks
+description: ICLR development environment reference — repo map, LiteLLM proxy, and SSH access shortcuts
+version: 1.0.0
 metadata:
-  version: 1.0.0
-  owner: tpanchal
-license: internal-only
+  hermes.tags: [liteLLM, repos, environment]
+  hermes.category: reference
 ---
 
 # General Engineering
