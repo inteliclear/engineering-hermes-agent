@@ -20,7 +20,7 @@
 - Model aliases: `reasoning`, `coding`, `smart`, `fast`, `coder`, `coder_pro`.
 - Repo `.env` (team-facing, gitignored) holds `HERMES_API_BASE`, `HERMES_API_KEY`, `HERMES_MODEL_ALIAS`.
 - `setup.sh` is idempotent — safe to re-run.
-- **turbo-sql-chunk repo path is `/home/tpanchal/iclr/turbo-sql-chunk`** (per global CLAUDE.md Key Repos table).
+- **turbo-sql-chunk repo path is `/home/tpanchal/workarea/git_repo/turbo-sql-chunk`** (per global CLAUDE.md Key Repos table).
 - Local clone target for this repo: `/home/tpanchal/iclr/engineering-hermes-agent/` (already created and cloned).
 
 > **Note:** The GitHub repo `inteliclear/engineering-hermes-agent` and its local clone already exist, and this plan file is already committed to it. Task 1 below covers only the remaining scaffold file (`.gitignore`).
@@ -173,7 +173,7 @@ kubectl -n litellm rollout status deploy/litellm
 | Repo | Location | Purpose |
 |------|----------|---------|
 | `glowing-octo-palm-tree` | `/home/tpanchal/iclr/glowing-octo-palm-tree` | GitOps source of truth |
-| `turbo-sql-chunk` | `/home/tpanchal/iclr/turbo-sql-chunk` | SQL chunking → ChromaDB for RAG |
+| `turbo-sql-chunk` | `/home/tpanchal/workarea/git_repo/turbo-sql-chunk` | SQL chunking → ChromaDB for RAG |
 | `engineering-hermes-agent` | `/home/tpanchal/iclr/engineering-hermes-agent` | This repo — Hermes bootstrap |
 
 ## SSH Access
@@ -311,7 +311,7 @@ metadata:
 - "Generate a spec for [stored procedure]"
 
 ## Prerequisites
-- `turbo-sql-chunk` repo at `/home/tpanchal/iclr/turbo-sql-chunk`
+- `turbo-sql-chunk` repo at `/home/tpanchal/workarea/git_repo/turbo-sql-chunk`
 - ChromaDB collection `sql_code` reachable at `https://chroma.inteliclear.io`
 - Python venv active: `source venv/bin/activate` (from turbo-sql-chunk root)
 
@@ -319,7 +319,7 @@ metadata:
 
 ### Health check
 ```bash
-cd /home/tpanchal/iclr/turbo-sql-chunk
+cd /home/tpanchal/workarea/git_repo/turbo-sql-chunk
 python src/run_workflow.py --health-check
 ```
 
@@ -1097,7 +1097,7 @@ Expected: all files visible.
 - Skills are `SKILL.md` with frontmatter, not `README.md`; `INDEX.json` removed (Hermes auto-discovers).
 - Model config via `hermes config set`; key written directly to `~/.hermes/.env` — **the sed-injection bug is gone** (awk with `ENVIRON`, no regex on the value).
 - Memory dir is `~/.hermes/memories/` (plural).
-- turbo-sql-chunk path corrected to `/home/tpanchal/iclr/turbo-sql-chunk`.
+- turbo-sql-chunk path corrected to `/home/tpanchal/workarea/git_repo/turbo-sql-chunk`.
 - TypeScript example uses native `fetch` (no `node-fetch`).
 - Endpoint is `$HERMES_API_BASE/chat/completions` (no `/v1/messages` double-prefix).
 

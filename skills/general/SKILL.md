@@ -3,8 +3,9 @@ name: general
 description: ICLR development environment reference — repo map, LiteLLM proxy, and SSH access shortcuts
 version: 1.0.0
 metadata:
-  hermes.tags: [liteLLM, repos, environment]
-  hermes.category: reference
+  hermes:
+    tags: [liteLLM, repos, environment]
+    category: reference
 ---
 
 # General Engineering

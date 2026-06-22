@@ -3,8 +3,9 @@ name: cluster-ops
 description: ICLR k3s cluster maintenance — health checks, rolling updates, drift detection, and GitOps manifest deployment
 version: 1.0.0
 metadata:
-  hermes.tags: [k3s, gitops, maintenance]
-  hermes.category: infrastructure
+  hermes:
+    tags: [k3s, gitops, maintenance]
+    category: infrastructure
 ---
 
 # Cluster Ops

@@ -3,8 +3,9 @@ name: sql-ops
 description: Turbo SQL Chunk pipeline operations — workflow commands, ChromaDB vector store, and SQL RAG markers
 version: 1.0.0
 metadata:
-  hermes.tags: [turbo-sql-chunk, chromadb, sql-rag]
-  hermes.category: pipeline
+  hermes:
+    tags: [turbo-sql-chunk, chromadb, sql-rag]
+    category: pipeline
 ---
 
 # SQL Ops (Turbo SQL Chunk Pipeline)
@@ -20,7 +21,7 @@ Operations for the `turbo-sql-chunk` pipeline that chunks SQL stored procedures 
 
 ## Repository
 
-- **Path:** `/home/tpanchal/iclr/turbo-sql-chunk`
+- **Path:** `/home/tpanchal/workarea/git_repo/turbo-sql-chunk`
 
 ## Pipeline Markers
 

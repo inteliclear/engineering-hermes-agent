@@ -51,7 +51,7 @@ kubectl -n litellm rollout status deploy/litellm
 | Repo | Location | Purpose |
 |------|----------|---------|
 | `glowing-octo-palm-tree` | `/home/tpanchal/iclr/glowing-octo-palm-tree` | GitOps source of truth |
-| `turbo-sql-chunk` | `/home/tpanchal/iclr/turbo-sql-chunk` | SQL chunking → ChromaDB for RAG |
+| `turbo-sql-chunk` | `/home/tpanchal/workarea/git_repo/turbo-sql-chunk` | SQL chunking → ChromaDB for RAG |
 | `engineering-hermes-agent` | `/home/tpanchal/iclr/engineering-hermes-agent` | This repo — Hermes bootstrap |
 
 ## SSH Access
