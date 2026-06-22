@@ -2,65 +2,89 @@
 
 ## Prerequisites
 
+- **git** and **curl** (required — everything else comes with the Hermes installer)
+- **python3** 3.10+ (optional — used for smoke-test JSON parsing and Python examples)
 - **OS:** Ubuntu 22.04 / 24.04 (WSL2 or bare metal)
-- **Python:** 3.10+
-- **Node.js:** 18+
-- **Git:** 2.30+
-- **Curl:** 7.68+
 
-## Step-by-Step
+> **WSL2:** Clone this repo under your Linux home (`~`) rather than `/mnt/c` or `/mnt/d`.
+> On a Windows-mounted drive, the skills symlink falls back to a plain copy, so skills
+> won't auto-update on `git pull`.
 
-### 1. Clone the Repo
+## Correct Flow
+
+Hermes installs via the official curl installer. It brings its own Python 3.11, Node 22, ripgrep, and ffmpeg. Only git + curl are host prerequisites.
+
+### 1. Clone and Run Setup
 
 ```bash
 git clone https://github.com/inteliclear/engineering-hermes-agent
 cd engineering-hermes-agent
+./setup.sh
 ```
 
-### 2. Run the Bootstrap Script
+On Windows (WSL2/Git Bash, or PowerShell):
 
 ```bash
-bash setup.sh
+# Bash (WSL2 / Git Bash)
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+
+# PowerShell (native Windows)
+iex (irm https://hermes-agent.nousresearch.com/install.ps1)
 ```
 
-The script will:
-- Create a Python virtual environment (`.venv`)
-- Install `hermes-agent`, `openai`, `pyyaml`
-- Install Node dependencies (`npm install`)
-- Copy `.env.example` → `.env`
-- Seed memory and skill files to `~/.hermes/`
-- Run a smoke test against the LiteLLM proxy
+### 2. What setup.sh Does
 
-### 3. Pass Your LiteLLM Key (Optional)
+`setup.sh` performs these steps idempotently:
+
+1. **Checks prerequisites** — verifies `git` and `curl` are on PATH; warns if `python3` is missing.
+2. **Installs Hermes** — runs the official curl installer. Hermes brings its own Python, Node, ripgrep, and ffmpeg.
+3. **Wires config** — maps the repo `.env` to native Hermes config:
+
+   | `.env` variable | Hermes destination |
+   |-----------------|-------------------|
+   | `HERMES_API_BASE` | `~/.hermes/config.yaml` → `model.base_url` |
+   | `HERMES_MODEL_ALIAS` | `~/.hermes/config.yaml` → `model.default` |
+   | `HERMES_API_KEY` | `~/.hermes/.env` → `OPENAI_API_KEY` |
+
+4. **Seeds memory** — copies `memory/MEMORY.md` and `memory/USER.md` to `~/.hermes/memories/`. Open `~/.hermes/memories/USER.md` and fill in your name and role.
+5. **Installs skills** — symlinks `skills/` to `~/.hermes/skills/iclr` so Hermes auto-discovers `SKILL.md` files. Falls back to a copy if the symlink target crosses filesystem boundaries (e.g., WSL2 `/mnt/c`).
+6. **Smoke test** — POSTs to `${HERMES_API_BASE}/chat/completions` to verify connectivity.
+
+### 3. Get Your LiteLLM Key
+
+The setup script will prompt for your LiteLLM master key. To retrieve it:
 
 ```bash
-LITE_LLM_KEY=sk-xxxxx bash setup.sh
+kubectl get secret litellm-master-key -n litellm -o jsonpath='{.data.key}' | base64 -d
 ```
 
-If not passed, the `.env` file will contain the placeholder value and you'll need to edit it manually.
+You can also pass it as an environment variable to skip the prompt:
+
+```bash
+HERMES_API_KEY=sk-xxxxx ./setup.sh
+```
 
 ### 4. Verify the Smoke Test
 
-After setup, check the proxy:
+After setup, verify connectivity:
 
 ```bash
-curl -s https://litellm.inteliclear.io/v1/models \
-  -H "Authorization: Bearer <your-master-key>" | jq '.data[].id'
+curl -s -X POST "$HERMES_API_BASE/chat/completions" \
+  -H "Authorization: Bearer $HERMES_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"reasoning","max_tokens":10,"messages":[{"role":"user","content":"What is the capital of France?"}]}'
 ```
 
-### 5. Configure Model Alias
-
-Edit `.env` and set your preferred model:
+### 5. Launch
 
 ```bash
-HERMES_MODEL_ALIAS=coding
+hermes
 ```
 
-### 6. Initialize Hermes
+## Upgrading
 
 ```bash
-source .venv/bin/activate
-python3 -m hermes init
+hermes update
 ```
 
 ## Troubleshooting
@@ -70,12 +94,24 @@ python3 -m hermes init
 Your master key is likely wrong. Get the current key:
 
 ```bash
-kubectl -n litellm get secret litellm-secret -o jsonpath='{.data.LITELLM__MASTER_KEY}' | base64 -d
+kubectl get secret litellm-master-key -n litellm -o jsonpath='{.data.key}' | base64 -d
 ```
 
-### `hermes-agent` package not found
+### Smoke test fails — check the proxy
 
-The pip package name is `hermes-agent` (subject to change). If the package is temporarily unavailable, you can also install from source or use the direct import path.
+```bash
+kubectl -n litellm rollout status deploy/litellm
+```
+
+### Skills not auto-updating on git pull
+
+If you see a copy instead of a symlink at `~/.hermes/skills/iclr`, you're likely on WSL2 with the repo under `/mnt/c` or `/mnt/d`. Move the repo to your Linux home:
+
+```bash
+mv ~/mnt/c/engineering-hermes-agent ~/engineering-hermes-agent
+```
+
+Then re-run `./setup.sh`.
 
 ### Memory files not seeded
 

@@ -7,7 +7,13 @@ Minimal, portable, and auditable starter for ICLR's Hermes Agent engineering env
 ```bash
 git clone https://github.com/inteliclear/engineering-hermes-agent
 cd engineering-hermes-agent
-bash setup.sh
+./setup.sh
+```
+
+Then open `~/.hermes/memories/USER.md` and fill in your name and role, then launch:
+
+```bash
+hermes
 ```
 
 ## What This Gives You
@@ -15,27 +21,35 @@ bash setup.sh
 | Artifact | Purpose |
 |----------|---------|
 | `.env.example` | Template for LiteLLM proxy + model routing |
-| `setup.sh` | Idempotent bootstrap (pip, npm, memory seeding) |
+| `setup.sh` | Idempotent bootstrap (Hermes install, config wiring, memory/skills seeding, smoke test) |
 | `memory/` | Cluster & infrastructure memory (Hermes context) |
 | `skills/` | Domain skill files (SQL, cluster ops, general) |
 | `examples/` | Minimal Python and TypeScript reference scripts |
 | `docs/SETUP.md` | Detailed setup walkthrough |
 
-## Architecture
+## Prerequisites
 
-```
-┌──────────────────────────────┐
-│  Your Machine               │
-│  ├── .venv (Python 3.10+)   │
-│  ├── node_modules (Node 18+) │
-│  ├── .env (config)         │
-│  ├── memory/ → ~/.hermes/  │
-│  └── skills/               │
-│           │                  │
-│           ▼                  │
-│  ICLR Cluster (k3s)        │
-│  └── litellm.inteliclear.io│
-```
+Only **git** and **curl** are required. The official Hermes installer brings its own Python 3.11, Node 22, ripgrep, and ffmpeg.
+
+**Optional:** `python3` 3.10+ is recommended for the smoke-test JSON parsing and Python examples.
+
+## WSL2 Caveat
+
+Clone this repo under your Linux home (`~`) rather than `/mnt/c` or `/mnt/d`. If the repo lives on a Windows-mounted drive, the skills symlink falls back to a plain copy, meaning skills won't auto-update on `git pull`.
+
+## Config Mapping
+
+`setup.sh` maps your repo `.env` to the native Hermes config:
+
+| `.env` variable | Hermes destination |
+|-----------------|-------------------|
+| `HERMES_API_BASE` | `~/.hermes/config.yaml` → `model.base_url` |
+| `HERMES_MODEL_ALIAS` | `~/.hermes/config.yaml` → `model.default` |
+| `HERMES_API_KEY` | `~/.hermes/.env` → `OPENAI_API_KEY` |
+
+## Skills
+
+`setup.sh` symlinks the repo `skills/` directory to `~/.hermes/skills/iclr`. Hermes auto-discovers `SKILL.md` files there. If you're on WSL2 and the repo lives under `/mnt/c` or `/mnt/d`, the symlink falls back to a copy — see `docs/SETUP.md` for the fix.
 
 ## Model Aliases
 
@@ -48,15 +62,11 @@ bash setup.sh
 | `coder` | 10.5.1.12 + 10.5.1.19 | Qwen2.5-Coder-3B (weighted LB) |
 | `coder_pro` | DGX Spark 10.5.1.49 | AEON Qwen3.6-27B NVFP4 |
 
-## Setup
-
-Run `bash setup.sh` (idempotent). Optionally pass `LITE_LLM_KEY` to inject your LiteLLM master key:
+## Upgrading
 
 ```bash
-LITE_LLM_KEY=sk-xxxxx bash setup.sh
+hermes update
 ```
-
-See `docs/SETUP.md` for the full walkthrough.
 
 ## License
 
