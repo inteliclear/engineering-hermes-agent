@@ -79,4 +79,4 @@ The pip package name is `hermes-agent` (subject to change). If the package is te
 
 ### Memory files not seeded
 
-Check that `HERMES_ROOT` is set in your `.env` file (default: `~/.hermes`).
+Check that `HERMES_API_BASE`, `HERMES_API_KEY`, and `HERMES_MODEL_ALIAS` are set in your `.env` file.
