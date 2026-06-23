@@ -118,15 +118,32 @@ if ! "$DRY_RUN"; then
   else
     printf 'OPENAI_API_KEY=%s\n' "$HERMES_API_KEY" >> "$HERMES_DOTENV"
   fi
+
+  # web_extract backend (issue #13): self-hosted Firecrawl (LAN-only, no key).
+  # SearXNG covers web_search but cannot fetch page content; Firecrawl does.
+  # The instance is unauthenticated and internal, so only a URL is needed.
+  HERMES_FIRECRAWL_URL="${HERMES_FIRECRAWL_URL:-https://firecrawl.inteliclear.io}"
+  hermes config set web.extract_backend firecrawl
+  if grep -q "^FIRECRAWL_API_URL=" "$HERMES_DOTENV"; then
+    FIRECRAWL_API_URL="$HERMES_FIRECRAWL_URL" awk '
+      /^FIRECRAWL_API_URL=/ { print "FIRECRAWL_API_URL=" ENVIRON["FIRECRAWL_API_URL"]; next }
+      { print }
+    ' "$HERMES_DOTENV" > "$HERMES_DOTENV.tmp" && mv "$HERMES_DOTENV.tmp" "$HERMES_DOTENV"
+  else
+    printf 'FIRECRAWL_API_URL=%s\n' "$HERMES_FIRECRAWL_URL" >> "$HERMES_DOTENV"
+  fi
   chmod 600 "$HERMES_DOTENV"
 else
   echo "[dry-run] hermes config set model.provider custom"
   echo "[dry-run] hermes config set model.base_url \$HERMES_API_BASE"
   echo "[dry-run] hermes config set model.default \$HERMES_MODEL_ALIAS"
   echo "[dry-run] write OPENAI_API_KEY to $HERMES_HOME/.env"
+  echo "[dry-run] hermes config set web.extract_backend firecrawl"
+  echo "[dry-run] write FIRECRAWL_API_URL to $HERMES_HOME/.env"
 fi
 
 ok "Config wired (model.* in config.yaml, OPENAI_API_KEY in ~/.hermes/.env)"
+ok "web_extract backend: firecrawl (${HERMES_FIRECRAWL_URL:-https://firecrawl.inteliclear.io})"
 
 # --- Step 4: Memory seeding --------------------------------------------------
 log "Step 4/6: Seeding memory..."

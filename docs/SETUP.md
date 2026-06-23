@@ -116,3 +116,26 @@ Then re-run `./setup.sh`.
 ### Memory files not seeded
 
 Check that `HERMES_API_BASE`, `HERMES_API_KEY`, and `HERMES_MODEL_ALIAS` are set in your `.env` file.
+
+## Web Search & Extraction
+
+Two web capabilities are wired by default:
+
+| Tool | Backend | Endpoint |
+|------|---------|----------|
+| `web_search` | SearXNG | `https://search.inteliclear.io` |
+| `web_extract` | self-hosted Firecrawl | `https://firecrawl.inteliclear.io` (`FIRECRAWL_API_URL`) |
+
+SearXNG only returns search results; it cannot fetch page content. `setup.sh`
+sets `web.extract_backend=firecrawl` and writes `FIRECRAWL_API_URL` to
+`~/.hermes/.env` so search-then-read flows work. The Firecrawl instance is
+unauthenticated and LAN-only, so no key is required — override the URL with
+`HERMES_FIRECRAWL_URL` if needed.
+
+Firecrawl runs in the cluster (`manifests/firecrawl/` in the GitOps repo).
+
+- `web_extract` errors with *"SearXNG is a search-only backend"* → the extract
+  backend wasn't set; re-run `setup.sh` or
+  `hermes config set web.extract_backend firecrawl`.
+- `web_extract` errors with a connection failure → confirm Firecrawl is deployed
+  and `firecrawl.inteliclear.io` resolves on your network.
