@@ -50,6 +50,35 @@ iex (irm https://hermes-agent.nousresearch.com/install.ps1)
 5. **Installs skills** — symlinks `skills/` to `~/.hermes/skills/iclr` so Hermes auto-discovers `SKILL.md` files. Falls back to a copy if the symlink target crosses filesystem boundaries (e.g., WSL2 `/mnt/c`).
 6. **Smoke test** — POSTs to `${HERMES_API_BASE}/chat/completions` to verify connectivity.
 
+Step 3 also wires Hermes' **auxiliary (side-task) and delegation models** to LiteLLM — see below.
+
+### Auxiliary & Delegation Models
+
+Hermes runs small side-tasks (title generation, context compression, triage,
+curation, sub-agent delegation, …) through a separate *auxiliary* model router.
+In its default `auto` mode that router tries **OpenRouter → Nous** before the
+custom endpoint, and since neither has team credentials it logs noise on every
+run:
+
+```text
+WARNING agent.auxiliary_client: marking openrouter unhealthy ... (payment / credit error)
+WARNING agent.auxiliary_client: Auxiliary Nous client unavailable: no Nous authentication found
+```
+
+`setup.sh` fixes this by pinning each text auxiliary role (and `delegation`) to
+`provider: custom`, which resolves straight to the LiteLLM proxy — reusing
+`model.base_url` + `OPENAI_API_KEY`, so the key is **not** duplicated per role.
+
+| Hermes config | Value | LiteLLM alias |
+|---------------|-------|---------------|
+| `auxiliary.title_generation` / `triage_specifier` / `profile_describer` / `monitor` / `skills_hub` / `approval` / `mcp` / `kanban_decomposer` / `tts_audio_tags` `.provider`+`.model` | `custom` | `fast` (override: `HERMES_AUX_FAST_ALIAS`) |
+| `auxiliary.compression` / `background_review` / `curator` `.provider`+`.model` | `custom` | `coding` (override: `HERMES_AUX_CODING_ALIAS`) |
+| `delegation.provider`+`.model` | `custom` | `coding` |
+
+`auxiliary.vision` and `auxiliary.web_extract` are intentionally left on `auto`
+(vision needs a multimodal backend; `web_extract` has no extract backend — see
+the web-search note in the troubleshooting section / issue #13).
+
 ### 3. Get Your LiteLLM Key
 
 The setup script will prompt for your LiteLLM master key. To retrieve it:
