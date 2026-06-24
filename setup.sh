@@ -100,6 +100,10 @@ if ! "$DRY_RUN"; then
   : "${HERMES_API_BASE:?HERMES_API_BASE missing from .env}"
   : "${HERMES_API_KEY:?HERMES_API_KEY missing from .env}"
   HERMES_MODEL_ALIAS="${HERMES_MODEL_ALIAS:-reasoning}"
+  # Auxiliary/side-task aliases (issue #9). Light roles use the cheap/fast alias;
+  # quality-sensitive roles (compression, review, curator, delegation) use coding.
+  HERMES_AUX_FAST_ALIAS="${HERMES_AUX_FAST_ALIAS:-fast}"
+  HERMES_AUX_CODING_ALIAS="${HERMES_AUX_CODING_ALIAS:-coding}"
 
   mkdir -p "$HERMES_HOME"
 
@@ -107,6 +111,29 @@ if ! "$DRY_RUN"; then
   hermes config set model.provider custom
   hermes config set model.base_url "$HERMES_API_BASE"
   hermes config set model.default "$HERMES_MODEL_ALIAS"
+
+  # Auxiliary + delegation wiring (issue #9): point Hermes' side-task clients at
+  # the LiteLLM proxy. In "auto" mode the auxiliary router tries openrouter then
+  # nous before falling through to the custom endpoint, emitting noisy
+  # "marking openrouter unhealthy" / "no Nous authentication" warnings (neither
+  # has team credentials). Setting provider=custom makes each role resolve
+  # straight to the custom endpoint, reusing model.base_url + OPENAI_API_KEY — so
+  # the key is NOT duplicated per role. vision/web_extract are left on auto
+  # (vision needs a multimodal backend; web_extract is tracked in #13).
+  AUX_FAST_ROLES=(title_generation triage_specifier profile_describer monitor \
+    skills_hub approval mcp kanban_decomposer tts_audio_tags)
+  AUX_CODING_ROLES=(compression background_review curator)
+  for r in "${AUX_FAST_ROLES[@]}"; do
+    hermes config set "auxiliary.$r.provider" custom
+    hermes config set "auxiliary.$r.model" "$HERMES_AUX_FAST_ALIAS"
+  done
+  for r in "${AUX_CODING_ROLES[@]}"; do
+    hermes config set "auxiliary.$r.provider" custom
+    hermes config set "auxiliary.$r.model" "$HERMES_AUX_CODING_ALIAS"
+  done
+  # Delegation / sub-agent path → coding alias on LiteLLM.
+  hermes config set delegation.provider custom
+  hermes config set delegation.model "$HERMES_AUX_CODING_ALIAS"
 
   # Secret goes in ~/.hermes/.env — direct write, no regex.
   HERMES_DOTENV="$HERMES_HOME/.env"
@@ -123,10 +150,12 @@ else
   echo "[dry-run] hermes config set model.provider custom"
   echo "[dry-run] hermes config set model.base_url \$HERMES_API_BASE"
   echo "[dry-run] hermes config set model.default \$HERMES_MODEL_ALIAS"
+  echo "[dry-run] hermes config set auxiliary.<role>.provider custom (+ model fast/coding)"
+  echo "[dry-run] hermes config set delegation.provider custom (+ model coding)"
   echo "[dry-run] write OPENAI_API_KEY to $HERMES_HOME/.env"
 fi
 
-ok "Config wired (model.* in config.yaml, OPENAI_API_KEY in ~/.hermes/.env)"
+ok "Config wired (model.* + auxiliary.*/delegation in config.yaml, OPENAI_API_KEY in ~/.hermes/.env)"
 
 # --- Step 4: Memory seeding --------------------------------------------------
 log "Step 4/6: Seeding memory..."
