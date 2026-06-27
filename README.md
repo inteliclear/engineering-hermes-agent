@@ -22,6 +22,7 @@ hermes
 |----------|---------|
 | `.env.example` | Template for LiteLLM proxy + model routing |
 | `setup.sh` | Idempotent bootstrap (Hermes install, config wiring, memory/skills seeding, smoke test) |
+| `scripts/test-aliases.sh` | Smoke-test all 6 model aliases against the LiteLLM proxy |
 | `memory/` | Cluster & infrastructure memory (Hermes context) |
 | `skills/` | Domain skill files (SQL, cluster ops, general) |
 | `examples/` | Minimal Python and TypeScript reference scripts |
@@ -56,11 +57,18 @@ Clone this repo under your Linux home (`~`) rather than `/mnt/c` or `/mnt/d`. If
 | Alias | Backend | Model |
 |-------|---------|-------|
 | `reasoning` | GPU LXC 10.5.1.36 | Qwen3.5-27B-UD-IQ3_XXS |
-| `coding` | CPU LXC 10.5.1.33 | Qwen3-Coder-30B-A3B-IQ4_XS |
+| `coding` | Vulkan APU 10.5.1.146 | Qwen3-Coder-30B-A3B-IQ4_XS |
 | `smart` | GPU LXC 10.5.1.36 | GPT-OSS-20B |
-| `fast` | Vulkan 10.5.1.146 | Qwen3-4B-Instruct-2507 |
-| `coder` | 10.5.1.12 + 10.5.1.19 | Qwen2.5-Coder-3B (weighted LB) |
+| `fast` | Proxmox CPU 10.5.1.12 | Qwen3.5-9B-Q4_K_M |
+| `coder` | Proxmox CPU 10.5.1.12 | Qwen3.5-9B-Q4_K_M |
 | `coder_pro` | DGX Spark 10.5.1.49 | AEON Qwen3.6-27B NVFP4 |
+
+## Testing
+
+```bash
+# Smoke-test all 6 model aliases
+./scripts/test-aliases.sh
+```
 
 ## Upgrading
 
